@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.Python
+
+# Virtual Environments
+venv/
+.venv/
+env/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# Data files (DO NOT UPLOAD - too large)
+data/*.csv
+!data/veteran_rag_corpus.csv
+data/*.xpt
+data/*.XPT
+data/*.txt
+data/pharma-nonpharma-ptsd-2023-update-app-g-2/
+
+# Keep data directory structure only
+!data/README.md
+!data/.gitkeep
+
+# Models (rebuilt automatically)
+models/faiss_index/
+models/*.h5
+models/*.pkl
+
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Personal documents
+*.docx
+*.pptx
+
+# Backup files
+*_old.*
+*.bak
+
+# Notebook Files
+*.ipynb
+notebooks/
+
+
+# Misc
+setupfiles/
+outputs/
+

@@ -1,0 +1,31 @@
+# MINIMAL REQUIREMENTS - Just What You Need for the Chatbot
+# Use this if the full requirements.txt has issues
+
+# Core Data Science
+pandas
+numpy
+scikit-learn
+
+# NLP and RAG (Essential)
+sentence-transformers
+faiss-cpu
+
+# UI (Essential)
+streamlit
+plotly
+
+# Data Processing (Essential)
+openpyxl
+python-dotenv
+
+# Optional but Recommended
+matplotlib
+seaborn
+tqdm
+
+# INSTALL IN THIS ORDER:
+# pip install pandas numpy scikit-learn
+# pip install sentence-transformers
+# pip install faiss-cpu
+# pip install streamlit plotly
+# pip install openpyxl matplotlib seaborn python-dotenv tqdm
