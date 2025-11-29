@@ -177,11 +177,4 @@ streamlit run app.py
 
 ---
 
-## Documentation
-
-- **[DATA_SOURCES.md](DATA_SOURCES.md)** - Complete data source documentation
-- **[DEMO_CHEAT_SHEET.txt](DEMO_CHEAT_SHEET.txt)** - Presentation guide
-
----
-
 **Built with ❤️ for Veterans**
