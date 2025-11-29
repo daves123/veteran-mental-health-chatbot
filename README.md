@@ -89,8 +89,6 @@ All data comes from publicly available, authoritative sources:
 | **Medical Abbreviations** | VA PTSD terminology database | [View](https://ptsd-va.data.socrata.com/PTSD-Repository/Abbreviations/46j5-9dq5/about_data) |
 | **AHRQ Treatment Research** | Systematic review of PTSD treatments | [View](https://catalog.data.gov/dataset/ahrq-report-and-data-files-2023-pharmacological-and-nonpharmacological-treatments-for-post) |
 
-**For complete documentation:** See [DATA_SOURCES.md](DATA_SOURCES.md)
-
 ---
 
 ## Demo Queries
