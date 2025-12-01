@@ -207,7 +207,7 @@ def main():
     st.markdown(
         """
         <div style='text-align: center; padding: 1rem; background: linear-gradient(135deg, #1f4e78 0%, #2d6a9f 100%); border-radius: 10px; margin-bottom: 1rem;'>
-            <h2 style='color: white; margin: 0;'>Veteran Mental Health Assistant</h2>
+            <h2 style='color: white; margin: 0;'>🎖️ Veteran Mental Health Assistant</h2>
             <p style='color: #e0e0e0; margin: 0.5rem 0 0 0; font-size: 0.9rem;'>Evidence-Based Support for Veterans & Families</p>
         </div>
         """,
@@ -221,7 +221,7 @@ def main():
 
     # Sidebar
     with st.sidebar:
-        st.markdown("### 🎖️ Veteran Mental Health Assistant")
+        st.markdown("### Veteran Mental Health Assistant")
 
         st.markdown("### 🎓 Presentation Mode")
         presentation_mode = st.checkbox(
