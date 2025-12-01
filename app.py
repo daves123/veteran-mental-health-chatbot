@@ -121,26 +121,26 @@ def load_rag_system():
         try:
             # Try to load existing index
             rag.load_index()
-            st.sidebar.success("✅ RAG system loaded from cache")
+            st.sidebar.success(" RAG system loaded from cache")
         except FileNotFoundError:
             # Build new index if doesn't exist
             st.sidebar.info("🔨 Building RAG system for first time...")
             rag.load_corpus()
             rag.create_embeddings(show_progress=False)
             rag.build_faiss_index(save=True)
-            st.sidebar.success("✅ RAG system built and cached")
+            st.sidebar.success(" RAG system built and cached")
 
         # Test the system with a simple query
         try:
             test_result = rag.retrieve("test", k=1)
             if test_result is not None and len(test_result) > 0:
                 st.sidebar.success(
-                    f"✅ System tested - {len(rag.chunks_df)} chunks ready"
+                    f" System tested - {len(rag.chunks_df)} chunks ready"
                 )
             else:
-                st.sidebar.warning("⚠️ System loaded but test query returned no results")
+                st.sidebar.warning(" System loaded but test query returned no results")
         except Exception as e:
-            st.sidebar.error(f"❌ System test failed: {e}")
+            st.sidebar.error(f" System test failed: {e}")
             st.error(f"Full error: {e}")
             import traceback
 
@@ -161,7 +161,7 @@ def display_chat_message(
 ):
     """Display a chat message with optional sources and presentation features"""
     message_class = "user-message" if role == "user" else "assistant-message"
-    icon = "🧑" if role == "user" else "🤖"
+    icon = "🎖️" if role == "user" else "🤖"
 
     st.markdown(
         f"""
@@ -174,7 +174,7 @@ def display_chat_message(
     )
 
     if sources and role == "assistant":
-        with st.expander("📚 View Sources & Evidence", expanded=False):
+        with st.expander(" View Sources & Evidence", expanded=False):
             for i, source in enumerate(sources, 1):
                 # Highlight gender-specific sources
                 gender_tag = ""
@@ -232,7 +232,7 @@ def main():
 
         if presentation_mode:
             st.info(
-                "📊 **Presentation Tips:**\n\n"
+                " **Presentation Tips:**\n\n"
                 "• Use example questions below\n"
                 "• Show source citations\n"
                 "• Display system statistics\n"
@@ -247,7 +247,7 @@ def main():
         """)
 
         # Data Sources with links
-        st.markdown("### 📚 Data Sources")
+        st.markdown("### Data Sources")
         with st.expander("View All Sources & Links", expanded=False):
             st.markdown("""
             **[BRFSS 2024 Survey Data](https://www.cdc.gov/brfss/annual_data/annual_2024.html)**  
@@ -299,7 +299,7 @@ def main():
 
         # Optional Keras Model Integration
         if KERAS_AVAILABLE:
-            st.markdown("### 🧠 ML Model (Optional)")
+            st.markdown("### ML Model (Optional)")
             use_keras = st.checkbox(
                 "Enable Keras Mental Health Classification", value=False
             )
@@ -310,7 +310,7 @@ def main():
         else:
             use_keras = False
 
-        st.markdown("### 💡 Example Questions")
+        st.markdown("### Example Questions")
 
         # Enhanced example questions for presentation
         example_categories = {
@@ -349,7 +349,7 @@ def main():
         st.markdown("---")
 
         # System Statistics Button
-        if st.button("📊 View System Statistics", width="stretch"):
+        if st.button(" View System Statistics", width="stretch"):
             st.session_state.show_stats = True
 
         # Demo Mode
@@ -387,7 +387,7 @@ def main():
 
     # Show statistics if requested
     if st.session_state.get("show_stats", False):
-        st.markdown("### 📊 System Statistics")
+        st.markdown("### System Statistics")
 
         col1, col2, col3, col4 = st.columns(4)
 
@@ -535,7 +535,7 @@ def main():
 
             st.markdown("---")
 
-        st.success("✅ Demo Complete!")
+        st.success(" Demo Complete!")
         st.session_state.run_demo = False
         st.rerun()
     for message in st.session_state.messages:
