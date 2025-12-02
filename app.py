@@ -26,7 +26,7 @@ try:
     from tensorflow import keras
 
     KERAS_AVAILABLE = True
-except:
+except Exception:
     KERAS_AVAILABLE = False
 
 
@@ -101,12 +101,35 @@ st.markdown(
         border-radius: 5px;
         border-left: 4px solid #ffc107;
         margin-top: 2rem;
+        margin-bottom: 1.5rem;
         font-size: 0.9rem;
     }
 </style>
 """,
     unsafe_allow_html=True,
 )
+
+
+def dedupe_sources_by_doc(sources):
+    """
+    Given a list of source dicts from the RAG system, return a list where each
+    (source, doc_id) appears only once, keeping the highest-score entry.
+    """
+    by_key = {}
+    for s in sources:
+        # Handle missing fields defensively
+        src = s.get("source", "Unknown source")
+        doc_id = s.get("doc_id", "Unknown document")
+        score = float(s.get("score", 0.0))
+
+        key = (src, doc_id)
+        existing = by_key.get(key)
+
+        # Keep the entry with the highest score
+        if existing is None or score > float(existing.get("score", 0.0)):
+            by_key[key] = {**s, "source": src, "doc_id": doc_id, "score": score}
+
+    return list(by_key.values())
 
 
 @st.cache_resource
@@ -121,21 +144,21 @@ def load_rag_system():
         try:
             # Try to load existing index
             rag.load_index()
-            st.sidebar.success(" RAG system loaded from cache")
+            st.sidebar.success("✓ RAG system loaded from cache")
         except FileNotFoundError:
             # Build new index if doesn't exist
             st.sidebar.info("🔨 Building RAG system for first time...")
             rag.load_corpus()
             rag.create_embeddings(show_progress=False)
             rag.build_faiss_index(save=True)
-            st.sidebar.success(" RAG system built and cached")
+            st.sidebar.success("✓ RAG system built and cached")
 
         # Test the system with a simple query
         try:
             test_result = rag.retrieve("test", k=1)
             if test_result is not None and len(test_result) > 0:
                 st.sidebar.success(
-                    f" System tested - {len(rag.chunks_df)} chunks ready"
+                    f"✓ System tested - {len(rag.chunks_df)} chunks ready"
                 )
             else:
                 st.sidebar.warning(" System loaded but test query returned no results")
@@ -174,8 +197,11 @@ def display_chat_message(
     )
 
     if sources and role == "assistant":
-        with st.expander(" View Sources & Evidence", expanded=False):
-            for i, source in enumerate(sources, 1):
+        # De-duplicate sources by (source, doc_id)
+        unique_sources = dedupe_sources_by_doc(sources)
+
+        with st.expander("📚 View Sources & Evidence", expanded=False):
+            for i, source in enumerate(unique_sources, 1):
                 # Highlight gender-specific sources
                 gender_tag = ""
                 if highlight_gender and "metadata" in source:
@@ -196,13 +222,53 @@ def display_chat_message(
                     color = (
                         "green" if score > 0.5 else "orange" if score > 0.3 else "red"
                     )
-                    source_display += f'<strong>Relevance Score:</strong> <span style="color: {color}; font-weight: bold; font-size: 1.1em;">{score:.3f} ({score_pct:.1f}%)</span><br>'
+                    source_display += (
+                        f"<strong>Relevance Score:</strong> "
+                        f'<span style="color: {color}; font-weight: bold; font-size: 1.1em;">'
+                        f"{score:.3f} ({score_pct:.1f}%)</span><br>"
+                    )
 
                 source_display += "</div>"
                 st.markdown(source_display, unsafe_allow_html=True)
 
 
+def reset_chat_state():
+    # Core chat state
+    st.session_state.messages = []
+    st.session_state.query_count = 0
+
+    # Demo-related state
+    st.session_state.demo_results = []
+    st.session_state.demo_in_progress = False
+    st.session_state.run_demo = False
+
+    # UI toggles / misc
+    st.session_state.show_stats = False
+
+    # Reset example selection dropdown if it exists
+    if "example_select" in st.session_state:
+        del st.session_state["example_select"]
+
+    # Clear chat_input internal state (default key is "chat_input")
+    if "chat_input" in st.session_state:
+        st.session_state["chat_input"] = ""
+
+    # Clear any ad-hoc keys you used
+    for key in ["example_select", "chat_input", "last_query", "last_response"]:
+        st.session_state.pop(key, None)
+
+    # Clear cached data (but not cached resources like the FAISS index)
+    st.cache_data.clear()
+
+
 def main():
+    # Global "Clear Chat History" handling (MUST run before any widgets)
+    if st.session_state.get("clear_history_triggered", False):
+        reset_chat_state()
+        st.session_state.clear_history_triggered = False
+        st.rerun()
+    # End Clear Chat History handling
+
     # Header
     st.markdown(
         """
@@ -246,7 +312,7 @@ def main():
         PTSD and related conditions.
         """)
 
-        # Data Sources with links
+        # Data Sources with links and descriptions
         st.markdown("### Data Sources")
         with st.expander("View All Sources & Links", expanded=False):
             st.markdown("""
@@ -344,6 +410,13 @@ def main():
             "Try an example:",
             options=[""] + example_categories[selected_category],
             label_visibility="collapsed",
+            key="example_select",
+        )
+
+        ask_example = st.button(
+            "➡️ Ask this example",
+            help="Run the selected example question",
+            key="ask_example_btn",
         )
 
         st.markdown("---")
@@ -356,7 +429,7 @@ def main():
         if presentation_mode:
             st.markdown("---")
             st.markdown("### 🎬 Demo Mode")
-            if st.button("Run Auto Demo", width="stretch"):
+            if st.button("▶️ Run Auto Demo"):
                 st.session_state.run_demo = True
 
         st.markdown("---")
@@ -384,6 +457,13 @@ def main():
 
     if "query_count" not in st.session_state:
         st.session_state.query_count = 0
+
+    # Demo state variables
+    if "demo_results" not in st.session_state:
+        st.session_state.demo_results = []
+
+    if "demo_in_progress" not in st.session_state:
+        st.session_state.demo_in_progress = False
 
     # Show statistics if requested
     if st.session_state.get("show_stats", False):
@@ -478,7 +558,7 @@ def main():
                 x=1.02,
                 font=dict(size=10),
             ),
-            margin=dict(l=20, r=250, t=60, b=20),  # Large right margin for legend
+            margin=dict(l=20, r=250, t=60, b=20),
             height=600,
         )
 
@@ -503,8 +583,15 @@ def main():
 
         st.markdown("---")
 
-    # Auto Demo Mode (for presentation)
-    if st.session_state.get("run_demo", False):
+    # AUTO DEMO MODE
+    if (
+        st.session_state.get("run_demo", False)
+        and not st.session_state.demo_in_progress
+        and not st.session_state.get("clear_history_triggered", False)
+    ):
+        st.session_state.demo_in_progress = True
+        st.session_state.demo_results = []  # Clear previous results
+
         st.info("🎬 **Running Auto Demo** - Demonstrating key queries...")
 
         demo_queries = [
@@ -513,31 +600,91 @@ def main():
             "What treatments are available for PTSD?",
         ]
 
-        for query in demo_queries:
-            st.markdown(f"### Demo Query: {query}")
+        progress_bar = st.progress(0)
+        status_text = st.empty()
 
-            with st.spinner(f"Processing: {query}"):
-                try:
-                    result = rag.answer_query(query=query, k=3, use_llm=False)
+        for idx, query in enumerate(demo_queries):
+            # Update progress
+            progress = (idx + 1) / len(demo_queries)
+            progress_bar.progress(progress)
+            status_text.text(f"Processing query {idx + 1}/{len(demo_queries)}: {query}")
 
-                    st.markdown(f"**Answer:**\n{result['answer']}")
+            try:
+                result = rag.answer_query(query=query, k=3, use_llm=False)
 
-                    with st.expander("Sources"):
-                        for i, source in enumerate(result["sources"], 1):
-                            st.write(
-                                f"{i}. {source['source']} (score: {source['score']:.3f})"
-                            )
+                # Store result in session state
+                st.session_state.demo_results.append(
+                    {
+                        "query": query,
+                        "answer": result["answer"],
+                        "sources": result["sources"],
+                        "num_sources": result["num_sources"],
+                        "top_score": result["top_score"],
+                    }
+                )
+            # Improved exception handling
+            except Exception as e:
+                st.error(f"Demo error on query '{query}': {e}")
+                st.session_state.demo_results.append(
+                    {
+                        "query": query,
+                        "answer": f"Error: {e}",
+                        "sources": [],
+                        "num_sources": 0,
+                        "top_score": 0.0,
+                    }
+                )
 
-                    time.sleep(2)  # Pause between queries
+        # Clear progress indicators
+        progress_bar.empty()
+        status_text.empty()
 
-                except Exception as e:
-                    st.error(f"Demo error: {e}")
-
-            st.markdown("---")
-
-        st.success(" Demo Complete!")
+        # Mark demo as complete
         st.session_state.run_demo = False
-        st.rerun()
+        st.session_state.demo_in_progress = False
+
+        st.success(" Demo Complete! Results displayed below.")
+
+    # Display demo results if available
+    if st.session_state.demo_results:
+        st.markdown("---")
+        st.markdown("## 🎬 Auto Demo Results")
+
+        for idx, result in enumerate(st.session_state.demo_results, 1):
+            with st.expander(f"Demo Query {idx}: {result['query']}", expanded=True):
+                st.markdown("**Answer:**")
+                st.markdown(result["answer"])
+
+                st.markdown("\n**Metadata:**")
+                col1, col2 = st.columns(2)
+                with col1:
+                    unique_sources = dedupe_sources_by_doc(result["sources"])
+                    st.metric("Sources Used", len(unique_sources))
+                with col2:
+                    st.metric("Top Score", f"{result['top_score']:.3f}")
+
+                if result["sources"]:
+                    with st.expander("📚 View Sources"):
+                        # De-duplicate by document
+                        unique_sources = dedupe_sources_by_doc(result["sources"])
+
+                        for i, source in enumerate(unique_sources, 1):
+                            st.write(
+                                f"{i}. **{source['source']}** (score: {source['score']:.3f})"
+                            )
+                            st.write(f"   - Document: {source['doc_id']}")
+                            # Chunk id is less important for presentations; keep or drop as you prefer
+                            if "chunk_id" in source:
+                                st.write(f"   - Chunk: {source['chunk_id']}")
+        if st.button("🗑️ Clear Demo Results"):
+            st.session_state.demo_results = []
+            st.session_state.run_demo = False
+            st.session_state.demo_in_progress = False
+            st.rerun()
+
+        st.markdown("---")
+
+    # Display chat messages from history
     for message in st.session_state.messages:
         display_chat_message(
             message["role"],
@@ -547,40 +694,14 @@ def main():
             highlight_gender=show_gender_analysis,
         )
 
-    # Disclaimer
-    st.markdown(
-        """
-    <div class="disclaimer">
-        <strong>⚠️ Important Disclaimer:</strong><br>
-        This chatbot provides educational information only and is not a substitute for 
-        professional medical advice, diagnosis, or treatment. If you are experiencing a 
-        mental health emergency, please contact the <strong>Veterans Crisis Line</strong> 
-        at <strong>988 (Press 1)</strong> or text <strong>838255</strong>.
-    </div>
-    """,
-        unsafe_allow_html=True,
-    )
-
     # Footer actions
     st.markdown("---")
     col1, col2, col3 = st.columns(3)
 
     with col1:
         if st.button("🗑️ Clear Chat History", key="clear_history_btn"):
-            # Clear all chat-related state
-            st.session_state.messages = []
-            st.session_state.query_count = 0
-
-            # Force clear any cached data
-            if "last_query" in st.session_state:
-                del st.session_state["last_query"]
-            if "last_response" in st.session_state:
-                del st.session_state["last_response"]
-
-            # Clear Streamlit cache
-            st.cache_data.clear()
-
-            st.rerun()
+            # Set a flag; the actual reset+rerun is handled near the top of main()
+            st.session_state.clear_history_triggered = True
 
     with col2:
         if st.button("💾 Export Conversation"):
@@ -604,14 +725,12 @@ def main():
     # Chat input
     user_input = st.chat_input("Ask a question about veteran mental health...")
 
-    # Handle example question selection - only if no manual input
-    if not user_input and selected_example and selected_example != "":
+    # Handle example question ONLY when the button is clicked
+    if not user_input and ask_example and selected_example and selected_example != "":
         user_input = selected_example
-        # Clear the example selection after using it
-        st.session_state.used_example = True
 
-    # Process user input
-    if user_input:
+    # Process user input ONLY if we are NOT in the middle of clearing history
+    if user_input and not st.session_state.get("clear_history_triggered", False):
         # Add user message to history
         st.session_state.messages.append({"role": "user", "content": user_input})
 
@@ -651,6 +770,21 @@ def main():
 
             except Exception as e:
                 st.error(f"Error generating response: {e}")
+
+    # Persistent disclaimer below the input
+    if st.session_state.get("query_count", 0) > 0 or user_input:
+        st.markdown(
+            """
+            <div class="disclaimer">
+                <strong>⚠️ Important Disclaimer:</strong><br>
+                This chatbot provides educational information only and is not a substitute for 
+                professional medical advice, diagnosis, or treatment. If you are experiencing a 
+                mental health emergency, please contact the <strong>Veterans Crisis Line</strong> 
+                at <strong>988 (Press 1)</strong> or text <strong>838255</strong>.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 if __name__ == "__main__":

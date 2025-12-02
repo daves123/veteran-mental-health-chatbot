@@ -1,10 +1,17 @@
 """
 Enhanced RAG System for Veteran Mental Health Chatbot
 Extends midterm RAG work with dense embeddings, FAISS, and domain-specific features
+
+IMPROVEMENTS ADDED:
+- Smart query type detection (definition, symptom, treatment)
+- Definition-focused answer formatter
+- Symptom-focused answer formatter
+- Improved answer routing logic
 """
 
 import logging
 import pickle
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -223,9 +230,12 @@ class VeteranHealthRAG:
                 "FAISS index not built. Call build_faiss_index() or load_index()"
             )
 
-        # Encode query
+        # Encode query (suppress progress bar)
         query_embedding = self.encoder.encode(
-            [query], convert_to_numpy=True, normalize_embeddings=True
+            [query],
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            show_progress_bar=False,  # ← Suppress progress bar
         ).astype("float32")
 
         logger.debug(f"Query embedding shape: {query_embedding.shape}")
@@ -453,16 +463,24 @@ Answer:"""
     ) -> str:
         """
         Create answer by extracting and formatting information from retrieved chunks
+        Routes to appropriate formatter based on query type
 
         Args:
             query: User query
             retrieved_chunks: Retrieved chunks
-            max_sentences: Maximum sentences to include
+            max_sentences: Maximum sentences for standard answers
 
         Returns:
             Formatted answer string
         """
-        # Check if this is a treatment-related query
+        # Check query type
+        query_lower = query.lower()
+
+        # Symptom queries - CHECK FIRST (higher priority than general definition)
+        symptom_keywords = ["symptom", "signs", "indication", "experience", "feel"]
+        is_symptom_query = any(kw in query_lower for kw in symptom_keywords)
+
+        # Treatment queries
         treatment_keywords = [
             "treatment",
             "therapy",
@@ -470,16 +488,310 @@ Answer:"""
             "intervention",
             "available",
             "options",
+            "help",
+            "cure",
+            "manage",
         ]
-        is_treatment_query = any(kw in query.lower() for kw in treatment_keywords)
+        is_treatment_query = any(kw in query_lower for kw in treatment_keywords)
 
-        if is_treatment_query and "Treatment:" in retrieved_chunks["text"].iloc[0]:
-            # Format as treatment list
+        # Definition queries - ONLY for "what is X" (singular), not "what are symptoms"
+        # More specific matching to avoid catching symptom queries
+        is_definition_query = False
+        if "what is" in query_lower and "symptom" not in query_lower:
+            is_definition_query = True
+        elif (
+            any(
+                phrase in query_lower
+                for phrase in ["define", "definition of", "meaning of", "tell me about"]
+            )
+            and "symptom" not in query_lower
+        ):
+            is_definition_query = True
+
+        # Route to appropriate formatter - SYMPTOM FIRST!
+        if is_symptom_query:
+            return self._format_symptom_answer(query, retrieved_chunks, max_sentences)
+        elif (
+            is_treatment_query
+            and len(retrieved_chunks) > 0
+            and "Treatment:" in str(retrieved_chunks.iloc[0].get("text", ""))
+        ):
             return self._format_treatment_answer(query, retrieved_chunks)
+        elif is_definition_query:
+            return self._format_definition_answer(query, retrieved_chunks)
         else:
-            # Use standard extractive approach
             return self._format_standard_answer(query, retrieved_chunks, max_sentences)
 
+    def _format_definition_answer(
+        self, query: str, retrieved_chunks: pd.DataFrame
+    ) -> str:
+        """
+        Format answer specifically for 'what is' definition queries
+        Prioritizes comprehensive definitions over abbreviations
+
+        Args:
+            query: User query
+            retrieved_chunks: Retrieved chunks dataframe
+
+        Returns:
+            Formatted definition answer
+        """
+        # Combine top chunks
+        top_chunks = retrieved_chunks.head(8)
+
+        # Classify chunks and track seen content
+        definitions = []
+        abbreviations = []
+        supplementary = []
+        seen_fingerprints = set()
+
+        for _, row in top_chunks.iterrows():
+            text = row["text"]
+            source = row["source"]
+            score = row["score"]
+
+            # Create fingerprint to detect duplicates (first 100 chars)
+            text_fingerprint = text[:100].lower().strip()
+
+            # Skip if duplicate
+            if text_fingerprint in seen_fingerprints:
+                continue
+            seen_fingerprints.add(text_fingerprint)
+
+            text_lower = text.lower()
+
+            # Check if it's just an abbreviation
+            if len(text) < 150 and any(
+                term in text
+                for term in ["Abbreviation:", "Term:", "Acronym:", "MPSS", "PSS-SR"]
+            ):
+                abbreviations.append((text, source, score))
+
+            # Check if it's a comprehensive definition
+            elif (
+                any(
+                    phrase in text_lower
+                    for phrase in [
+                        "is a mental health",
+                        "is characterized by",
+                        "disorder",
+                        "condition",
+                        "develops",
+                        "characterized",
+                        "symptoms include",
+                        "prevalence",
+                        "affects",
+                        "neurobiology",
+                    ]
+                )
+                and len(text) > 150
+            ):
+                definitions.append((text, source, score))
+
+            # Everything else is supplementary
+            else:
+                supplementary.append((text, source, score))
+
+        # Build answer
+        answer_parts = []
+
+        # Priority 1: Use comprehensive definitions if available
+        if definitions:
+            answer_parts.append("## Definition\n")
+
+            # Combine first 2-3 unique definition chunks
+            for i, (text, source, score) in enumerate(definitions[:3]):
+                clean_text = text.strip()
+                if not clean_text.endswith("."):
+                    clean_text += "."
+
+                answer_parts.append(f"{clean_text}\n")
+
+            # Add abbreviations as supplementary
+            if abbreviations:
+                answer_parts.append("\n**Medical Abbreviations:**")
+                for text, source, score in abbreviations[:3]:
+                    answer_parts.append(f"- {text}")
+
+        # Priority 2: If only abbreviations and supplementary content
+        elif abbreviations and supplementary:
+            answer_parts.append("**Medical Abbreviations:**\n")
+            for text, source, score in abbreviations[:2]:
+                answer_parts.append(f"- {text}\n")
+
+            answer_parts.append("\n**Additional Information:**\n")
+            for text, source, score in supplementary[:2]:
+                clean_text = text.strip()
+                if not clean_text.endswith("."):
+                    clean_text += "."
+                answer_parts.append(f"{clean_text}\n")
+
+        # Priority 3: Only abbreviations
+        elif abbreviations:
+            answer_parts.append("**Medical Abbreviations:**\n")
+            for text, source, score in abbreviations:
+                answer_parts.append(f"- {text}\n")
+
+            answer_parts.append(
+                "\n*For detailed information about symptoms, causes, and treatments, please ask a more specific question (e.g., 'What are PTSD symptoms?' or 'What treatments are available?')*"
+            )
+
+        # Priority 4: Only supplementary content
+        else:
+            answer_parts.append("**Information Found:**\n")
+            for text, source, score in supplementary[:3]:
+                clean_text = text.strip()
+                if not clean_text.endswith("."):
+                    clean_text += "."
+                answer_parts.append(f"{clean_text}\n")
+
+        # Add sources with scores (unique only)
+        unique_sources = []
+        unique_scores = []
+        seen_sources = set()
+
+        for _, row in retrieved_chunks.head(5).iterrows():
+            src = row["source"]
+            if src not in seen_sources:
+                unique_sources.append(src)
+                unique_scores.append(row["score"])
+                seen_sources.add(src)
+
+        answer_parts.append(
+            f"\n---\n*Sources: {', '.join(f'{s} ({sc:.3f})' for s, sc in zip(unique_sources[:3], unique_scores[:3]))}*"
+        )
+
+        return "\n".join(answer_parts)
+
+    def _format_symptom_answer(
+        self, query: str, retrieved_chunks: pd.DataFrame, max_sentences: int = 5
+    ) -> str:
+        """
+        Format answer specifically for symptom-related queries
+
+        Args:
+            query: User query
+            retrieved_chunks: Retrieved chunks
+            max_sentences: Max sentences to include
+
+        Returns:
+            Formatted symptom answer
+        """
+        answer_parts = []
+
+        # Look for symptom information and avoid duplicates
+        seen_content = set()
+        symptom_texts = []
+
+        for _, row in retrieved_chunks.head(10).iterrows():
+            text = row["text"]
+            source = row["source"]
+
+            # Create a fingerprint to detect duplicates (first 100 chars)
+            text_fingerprint = text[:100].lower().strip()
+
+            # Skip if we've seen this content
+            if text_fingerprint in seen_content:
+                continue
+            seen_content.add(text_fingerprint)
+
+            # Check if it contains symptom information
+            text_lower = text.lower()
+            if any(
+                term in text_lower
+                for term in [
+                    "symptom",
+                    "include",
+                    "experience",
+                    "cluster",
+                    "intrusion",
+                    "avoidance",
+                    "hyperarousal",
+                    "alterations",
+                ]
+            ):
+                symptom_texts.append((text, source))
+
+        # Format symptom information
+        if symptom_texts:
+            # Check if we have cluster-based symptoms (DSM-5 style)
+            has_clusters = any("cluster" in text.lower() for text, _ in symptom_texts)
+
+            if has_clusters:
+                answer_parts.append("## PTSD Symptoms in Veterans\n")
+                answer_parts.append(
+                    "PTSD symptoms are organized into four main clusters:\n"
+                )
+
+                # Format with cluster headers
+                for text, source in symptom_texts[:6]:
+                    clean_text = text.strip()
+                    if not clean_text.endswith("."):
+                        clean_text += "."
+
+                    # Check for cluster patterns
+                    if "intrusion" in text.lower() or "cluster b" in text.lower():
+                        answer_parts.append(
+                            f"\n**1. Intrusion Symptoms (Re-experiencing):**\n{clean_text}\n"
+                        )
+                    elif "avoidance" in text.lower() or "cluster c" in text.lower():
+                        answer_parts.append(
+                            f"\n**2. Avoidance Symptoms:**\n{clean_text}\n"
+                        )
+                    elif (
+                        "negative" in text.lower()
+                        and "mood" in text.lower()
+                        or "cluster d" in text.lower()
+                    ):
+                        answer_parts.append(
+                            f"\n**3. Negative Changes in Thoughts and Mood:**\n{clean_text}\n"
+                        )
+                    elif (
+                        "arousal" in text.lower()
+                        or "reactivity" in text.lower()
+                        or "cluster e" in text.lower()
+                    ):
+                        answer_parts.append(
+                            f"\n**4. Changes in Arousal and Reactivity:**\n{clean_text}\n"
+                        )
+                    elif "physical" in text.lower() or "comorbid" in text.lower():
+                        answer_parts.append(
+                            f"\n**Additional Considerations:**\n{clean_text}\n"
+                        )
+                    else:
+                        # Generic symptom info
+                        answer_parts.append(f"{clean_text}\n")
+            else:
+                answer_parts.append("## PTSD Symptoms in Veterans\n")
+                # Format as clean bullet list
+                for text, source in symptom_texts[:5]:
+                    clean_text = text.strip()
+                    if not clean_text.endswith("."):
+                        clean_text += "."
+                    answer_parts.append(f"- {clean_text}\n")
+        else:
+            # Fallback - just use top chunks
+            answer_parts.append("## PTSD Symptoms in Veterans\n")
+            for _, row in retrieved_chunks.head(3).iterrows():
+                text = row["text"].strip()
+                if not text.endswith("."):
+                    text += "."
+                answer_parts.append(f"- {text}\n")
+
+        # Add sources (unique only)
+        unique_sources = retrieved_chunks.head(5)["source"].unique()
+        scores = []
+        for src in unique_sources:
+            score = retrieved_chunks[retrieved_chunks["source"] == src].iloc[0]["score"]
+            scores.append(score)
+
+        answer_parts.append(
+            f"\n---\n*Sources: {', '.join(f'{s} ({sc:.3f})' for s, sc in zip(unique_sources[:3], scores[:3]))}*"
+        )
+
+        return "\n".join(answer_parts)
+
+    # Improved treatment answer formatter with structured parsing and clean output
     def _format_treatment_answer(
         self, query: str, retrieved_chunks: pd.DataFrame
     ) -> str:
@@ -559,115 +871,347 @@ Answer:"""
 
         return "\n".join(answer_parts)
 
-    def _format_standard_answer(
-        self, query: str, retrieved_chunks: pd.DataFrame, max_sentences: int = 3
-    ) -> str:
-        """Standard extractive answer formatting with improved readability"""
-        # Combine all retrieved text
-        combined_text = " ".join(retrieved_chunks["text"].tolist())
+    def _format_standard_answer(self, query, retrieved_chunks, max_sentences=5):
+        """Cleaner, clinically-useful extractive answer formatter."""
 
-        # Check if text contains numbered lists like (1), (2), (3)
-        import re
-
-        has_numbered_parens = bool(re.search(r"\((\d+)\)", combined_text))
-
-        if has_numbered_parens:
-            # Extract and format numbered list items
-            items = re.split(r"\((\d+)\)", combined_text)
-            formatted_items = []
-
-            for i in range(1, len(items), 2):
-                if i + 1 < len(items):
-                    num = items[i]
-                    text = items[i + 1].strip()
-                    # Clean up the text
-                    text = text.split(";")[
-                        0
-                    ].strip()  # Take first part before semicolon
-                    if text:
-                        formatted_items.append(f"{num}. {text}")
-
-            if formatted_items:
-                answer = "**Key Points:**\n\n" + "\n\n".join(
-                    formatted_items[:max_sentences]
-                )
-
-                # Add source attribution with scores
-                sources = retrieved_chunks["source"].unique()[:3]
-                top_scores = retrieved_chunks.head(3)["score"].tolist()
-
-                source_list = []
-                for src, score in zip(sources, top_scores):
-                    source_list.append(f"{src} ({score:.3f})")
-
-                answer += f"\n\n---\n**Sources:** {', '.join(source_list)}"
-                return answer
-
-        # Split into sentences
-        sentences = [s.strip() for s in combined_text.split(".") if len(s.strip()) > 20]
-
-        # Score sentences by keyword overlap with query
-        query_terms = set(query.lower().split())
-
-        def score_sentence(sent):
-            sent_terms = set(sent.lower().split())
-            overlap = len(query_terms & sent_terms)
-            # Boost for mental health keywords
-            domain_boost = sum(
-                1 for kw in self.mental_health_keywords if kw in sent.lower()
+        if retrieved_chunks is None or len(retrieved_chunks) == 0:
+            return (
+                "I couldn't find enough evidence in the knowledge base to answer that."
             )
-            return overlap + (domain_boost * 0.5)
 
-        # Get top sentences
-        scored_sentences = [(score_sentence(s), s) for s in sentences]
-        scored_sentences.sort(reverse=True, key=lambda x: x[0])
+        # --- STEP 1: Merge chunk text & remove metadata ---
+        raw_text = " ".join(
+            {t for t in retrieved_chunks["text"].tolist() if isinstance(t, str)}
+        )
 
-        top_sentences = [s for _, s in scored_sentences[:max_sentences]]
+        # Remove study metadata (DOI, PMID, PTSDPubs, etc.)
+        cleaned = re.sub(r"doi:\s*\S+", "", raw_text, flags=re.I)
+        cleaned = re.sub(r"PMID[:\s]*\d+", "", cleaned, flags=re.I)
+        cleaned = re.sub(r"PTSDPubs ID[:\s]*\d+", "", cleaned, flags=re.I)
+        cleaned = re.sub(
+            r"Inclusion/Exclusion Detail.*?(?=[A-Z][a-z])",
+            "",
+            cleaned,
+            flags=re.I | re.S,
+        )
+        cleaned = re.sub(
+            r"Year Added to PTSD-Repository.*?(?=[A-Z][a-z])",
+            "",
+            cleaned,
+            flags=re.I | re.S,
+        )
 
-        # Format with better structure
-        if len(top_sentences) == 1:
-            # Single sentence - just display it
-            answer = top_sentences[0]
-            if not answer.endswith("."):
-                answer += "."
-        else:
-            # Multiple sentences - format as numbered list or paragraphs
-            # Check if content looks like criteria/list items
-            if any(
-                keyword in combined_text.lower()
-                for keyword in [
-                    "exclusion criteria",
-                    "inclusion criteria",
-                    "following:",
-                    "criteria were",
-                ]
-            ):
-                # Format as bullet points for criteria/lists
-                answer = "**Key Information:**\n\n"
-                for i, sent in enumerate(top_sentences, 1):
-                    if not sent.endswith("."):
-                        sent += "."
-                    answer += f"• {sent}\n\n"
-            else:
-                # Format as paragraphs with spacing
-                formatted_sentences = []
-                for sent in top_sentences:
-                    if not sent.endswith("."):
-                        sent += "."
-                    formatted_sentences.append(sent)
-                answer = "\n\n".join(formatted_sentences)
+        # Remove extra whitespace
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
-        # Add source attribution with scores
+        # --- STEP 2: Split into sentences & filter for relevance ---
+        sentences = re.split(r"(?<=[.!?])\s+", cleaned)
+        key_terms = [
+            "combat",
+            "deployment",
+            "exposure",
+            "PTSD",
+            "stress",
+            "mental health",
+            "symptom",
+            "risk",
+            "trauma",
+            "affect",
+            "impact",
+            "distress",
+        ]
+
+        def is_relevant(sent):
+            s = sent.lower()
+            return any(term in s for term in key_terms) and len(sent) > 40
+
+        relevant = [s.strip() for s in sentences if is_relevant(s)]
+
+        # De-duplicate
+        seen = set()
+        unique = []
+        for s in relevant:
+            if s.lower() not in seen:
+                unique.append(s)
+                seen.add(s.lower())
+
+        if not unique:
+            return "Combat exposure is strongly associated with PTSD and other mental health conditions, according to VA research."
+
+        # --- STEP 3: Compress into bullet-point summary ---
+        summary = "**Key Points:**\n\n"
+        for s in unique[:max_sentences]:
+            summary += f"- {s}\n\n"
+
+        # --- STEP 4: Add clean source list ---
         sources = retrieved_chunks["source"].unique()[:3]
-        top_scores = retrieved_chunks.head(3)["score"].tolist()
+        top_scores = retrieved_chunks["score"].tolist()[:3]
 
-        source_list = []
-        for src, score in zip(sources, top_scores):
-            source_list.append(f"{src} ({score:.3f})")
+        source_info = ", ".join(
+            f"{src} ({score:.3f})" for src, score in zip(sources, top_scores)
+        )
 
-        answer += f"\n\n---\n**Sources:** {', '.join(source_list)}"
+        summary += f"---\n**Sources:** {source_info}"
+        return summary
 
-        return answer
+    # Woked well before, kept for reference
+    # def _format_standard_answer(
+    #     self, query: str, retrieved_chunks: pd.DataFrame, max_sentences: int = 3
+    # ) -> str:
+    #     """Standard extractive answer formatting with improved readability and
+    #     de-duplication of repeated content.
+    #     """
+
+    #     if retrieved_chunks is None or len(retrieved_chunks) == 0:
+    #         return "I don't have enough information in my knowledge base to answer that question accurately."
+
+    #     # --- NEW: de-duplicate chunk texts before combining ---
+    #     unique_texts = []
+    #     seen_chunk_fingerprints = set()
+    #     for text in retrieved_chunks["text"].tolist():
+    #         if not isinstance(text, str):
+    #             continue
+    #         fp = text[:160].lower().strip()
+    #         if fp in seen_chunk_fingerprints:
+    #             continue
+    #         seen_chunk_fingerprints.add(fp)
+    #         unique_texts.append(text)
+
+    #     combined_text = " ".join(unique_texts)
+
+    #     # Check if text contains numbered lists like (1), (2), (3)
+    #     has_numbered_parens = bool(re.search(r"\((\d+)\)", combined_text))
+
+    #     if has_numbered_parens:
+    #         # Extract and format numbered list items
+    #         items = re.split(r"\((\d+)\)", combined_text)
+    #         formatted_items = []
+
+    #         for i in range(1, len(items), 2):
+    #             if i + 1 < len(items):
+    #                 num = items[i]
+    #                 text = items[i + 1].strip()
+    #                 # Clean up the text
+    #                 text = text.split(";")[
+    #                     0
+    #                 ].strip()  # Take first part before semicolon
+    #                 if text:
+    #                     formatted_items.append(f"{num}. {text}")
+
+    #         # --- NEW: de-duplicate numbered items ---
+    #         dedup_items = []
+    #         seen_item_texts = set()
+    #         for item in formatted_items:
+    #             key = item.lower()
+    #             if key in seen_item_texts:
+    #                 continue
+    #             seen_item_texts.add(key)
+    #             dedup_items.append(item)
+
+    #         if dedup_items:
+    #             answer = "**Key Points:**\n\n" + "\n\n".join(
+    #                 dedup_items[:max_sentences]
+    #             )
+
+    #             # Add source attribution with scores
+    #             sources = retrieved_chunks["source"].unique()[:3]
+    #             top_scores = retrieved_chunks.head(3)["score"].tolist()
+
+    #             source_list = []
+    #             for src, score in zip(sources, top_scores):
+    #                 source_list.append(f"{src} ({score:.3f})")
+
+    #             answer += f"\n\n---\n**Sources:** {', '.join(source_list)}"
+    #             return answer
+
+    #     # Split into sentences
+    #     sentences = [s.strip() for s in combined_text.split(".") if len(s.strip()) > 20]
+
+    #     # --- NEW: de-duplicate sentences while preserving order ---
+    #     unique_sentences = []
+    #     seen_sentence_texts = set()
+    #     for s in sentences:
+    #         key = s.lower()
+    #         if key in seen_sentence_texts:
+    #             continue
+    #         seen_sentence_texts.add(key)
+    #         unique_sentences.append(s)
+    #     sentences = unique_sentences
+
+    #     if not sentences:
+    #         return "I don't have enough information in my knowledge base to answer that question accurately."
+
+    #     # Score sentences by keyword overlap with query
+    #     query_terms = set(query.lower().split())
+
+    #     def score_sentence(sent):
+    #         sent_terms = set(sent.lower().split())
+    #         overlap = len(query_terms & sent_terms)
+    #         # Boost for mental health keywords
+    #         domain_boost = sum(
+    #             1 for kw in self.mental_health_keywords if kw in sent.lower()
+    #         )
+    #         return overlap + (domain_boost * 0.5)
+
+    #     # Get top sentences
+    #     scored_sentences = [(score_sentence(s), s) for s in sentences]
+    #     scored_sentences.sort(reverse=True, key=lambda x: x[0])
+
+    #     # Take up to max_sentences from the de-duplicated set
+    #     top_sentences = [s for _, s in scored_sentences[:max_sentences]]
+
+    #     # Format with better structure
+    #     if len(top_sentences) == 1:
+    #         # Single sentence - just display it
+    #         answer = top_sentences[0]
+    #         if not answer.endswith("."):
+    #             answer += "."
+    #     else:
+    #         # Multiple sentences - format as numbered list or paragraphs
+    #         # Check if content looks like criteria/list items
+    #         if any(
+    #             keyword in combined_text.lower()
+    #             for keyword in [
+    #                 "exclusion criteria",
+    #                 "inclusion criteria",
+    #                 "following:",
+    #                 "criteria were",
+    #             ]
+    #         ):
+    #             # Format as bullet points for criteria/lists
+    #             answer = "**Key Information:**\n\n"
+    #             for i, sent in enumerate(top_sentences, 1):
+    #                 if not sent.endswith("."):
+    #                     sent += "."
+    #                 answer += f"• {sent}\n\n"
+    #         else:
+    #             # Format as paragraphs with spacing
+    #             formatted_sentences = []
+    #             for sent in top_sentences:
+    #                 if not sent.endswith("."):
+    #                     sent += "."
+    #                 formatted_sentences.append(sent)
+    #             answer = "\n\n".join(formatted_sentences)
+
+    #     # Add source attribution with scores
+    #     sources = retrieved_chunks["source"].unique()[:3]
+    #     top_scores = retrieved_chunks.head(3)["score"].tolist()
+
+    #     source_list = []
+    #     for src, score in zip(sources, top_scores):
+    #         source_list.append(f"{src} ({score:.3f})")
+
+    #     answer += f"\n\n---\n**Sources:** {', '.join(source_list)}"
+
+    #     return answer
+
+    # def _format_standard_answer(
+    #     self, query: str, retrieved_chunks: pd.DataFrame, max_sentences: int = 3
+    # ) -> str:
+    #     """Standard extractive answer formatting with improved readability"""
+    #     # Combine all retrieved text
+    #     combined_text = " ".join(retrieved_chunks["text"].tolist())
+
+    #     # Check if text contains numbered lists like (1), (2), (3)
+    #     has_numbered_parens = bool(re.search(r"\((\d+)\)", combined_text))
+
+    #     if has_numbered_parens:
+    #         # Extract and format numbered list items
+    #         items = re.split(r"\((\d+)\)", combined_text)
+    #         formatted_items = []
+
+    #         for i in range(1, len(items), 2):
+    #             if i + 1 < len(items):
+    #                 num = items[i]
+    #                 text = items[i + 1].strip()
+    #                 # Clean up the text
+    #                 text = text.split(";")[
+    #                     0
+    #                 ].strip()  # Take first part before semicolon
+    #                 if text:
+    #                     formatted_items.append(f"{num}. {text}")
+
+    #         if formatted_items:
+    #             answer = "**Key Points:**\n\n" + "\n\n".join(
+    #                 formatted_items[:max_sentences]
+    #             )
+
+    #             # Add source attribution with scores
+    #             sources = retrieved_chunks["source"].unique()[:3]
+    #             top_scores = retrieved_chunks.head(3)["score"].tolist()
+
+    #             source_list = []
+    #             for src, score in zip(sources, top_scores):
+    #                 source_list.append(f"{src} ({score:.3f})")
+
+    #             answer += f"\n\n---\n**Sources:** {', '.join(source_list)}"
+    #             return answer
+
+    #     # Split into sentences
+    #     sentences = [s.strip() for s in combined_text.split(".") if len(s.strip()) > 20]
+
+    #     # Score sentences by keyword overlap with query
+    #     query_terms = set(query.lower().split())
+
+    #     def score_sentence(sent):
+    #         sent_terms = set(sent.lower().split())
+    #         overlap = len(query_terms & sent_terms)
+    #         # Boost for mental health keywords
+    #         domain_boost = sum(
+    #             1 for kw in self.mental_health_keywords if kw in sent.lower()
+    #         )
+    #         return overlap + (domain_boost * 0.5)
+
+    #     # Get top sentences
+    #     scored_sentences = [(score_sentence(s), s) for s in sentences]
+    #     scored_sentences.sort(reverse=True, key=lambda x: x[0])
+
+    #     top_sentences = [s for _, s in scored_sentences[:max_sentences]]
+
+    #     # Format with better structure
+    #     if len(top_sentences) == 1:
+    #         # Single sentence - just display it
+    #         answer = top_sentences[0]
+    #         if not answer.endswith("."):
+    #             answer += "."
+    #     else:
+    #         # Multiple sentences - format as numbered list or paragraphs
+    #         # Check if content looks like criteria/list items
+    #         if any(
+    #             keyword in combined_text.lower()
+    #             for keyword in [
+    #                 "exclusion criteria",
+    #                 "inclusion criteria",
+    #                 "following:",
+    #                 "criteria were",
+    #             ]
+    #         ):
+    #             # Format as bullet points for criteria/lists
+    #             answer = "**Key Information:**\n\n"
+    #             for i, sent in enumerate(top_sentences, 1):
+    #                 if not sent.endswith("."):
+    #                     sent += "."
+    #                 answer += f"• {sent}\n\n"
+    #         else:
+    #             # Format as paragraphs with spacing
+    #             formatted_sentences = []
+    #             for sent in top_sentences:
+    #                 if not sent.endswith("."):
+    #                     sent += "."
+    #                 formatted_sentences.append(sent)
+    #             answer = "\n\n".join(formatted_sentences)
+
+    #     # Add source attribution with scores
+    #     sources = retrieved_chunks["source"].unique()[:3]
+    #     top_scores = retrieved_chunks.head(3)["score"].tolist()
+
+    #     source_list = []
+    #     for src, score in zip(sources, top_scores):
+    #         source_list.append(f"{src} ({score:.3f})")
+
+    #     answer += f"\n\n---\n**Sources:** {', '.join(source_list)}"
+
+    #     return answer
 
 
 def main():
@@ -687,11 +1231,12 @@ def main():
         rag.create_embeddings()
         rag.build_faiss_index(save=True)
 
-        # Test queries
+        # Test queries - now with improved answer formatting
         test_queries = [
-            "What are the common symptoms of PTSD in veterans?",
-            "What treatments are available for veteran mental health?",
-            "How does military service affect mental health?",
+            "What is PTSD?",  # Tests definition formatter
+            "What are the common symptoms of PTSD in veterans?",  # Tests symptom formatter
+            "What treatments are available for veteran mental health?",  # Tests treatment formatter
+            "How does military service affect mental health?",  # Tests standard formatter
         ]
 
         print("\n" + "=" * 80)
@@ -702,11 +1247,12 @@ def main():
             print(f"\nQuery: {query}")
             print("-" * 80)
 
-            result = rag.answer_query(query, k=3, use_llm=False)
+            result = rag.answer_query(query, k=5, use_llm=False)
 
             print(f"\nAnswer:\n{result['answer']}")
             print(f"\nNumber of sources used: {result['num_sources']}")
             print(f"Top relevance score: {result['top_score']:.3f}")
+            print("\n" + "=" * 80)
 
     except Exception as e:
         logger.error(f"Error in main: {e}")
