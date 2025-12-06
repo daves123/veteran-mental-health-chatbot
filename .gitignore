@@ -62,10 +62,3 @@ notebooks/
 setupfiles/
 outputs/
 
-
-# Outputs - exclude generated files but keep docs
-outputs/*.csv
-outputs/*.pkl
-outputs/*.json
-!outputs/*.md
-!outputs/README.md

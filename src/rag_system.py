@@ -1,12 +1,18 @@
 """
 Enhanced RAG System for Veteran Mental Health Chatbot
-Extends midterm RAG work with dense embeddings, FAISS, and domain-specific features
 
-IMPROVEMENTS ADDED:
-- Smart query type detection (definition, symptom, treatment)
-- Definition-focused answer formatter
-- Symptom-focused answer formatter
-- Improved answer routing logic
+DATA ARCHITECTURE:
+==================
+This system uses BRFSS 2024 data only. Future versions could add additional
+years, which would be indexed separately to maintain statistical integrity.
+
+BRFSS 2024 is a CROSS-SECTIONAL survey:
+- Different people surveyed each year via random-digit dialing
+- No individual tracking (privacy by design)
+- Represents a single snapshot in time
+
+If multiple years are added in the future, each would be indexed separately
+to enable proper trend analysis while respecting the independent sample design.
 """
 
 import logging
@@ -373,20 +379,20 @@ class VeteranHealthRAG:
 
         # Build prompt
         prompt = f"""You are a knowledgeable assistant specializing in veteran mental health, particularly PTSD and related conditions. 
-You provide evidence-based information to help veterans, their families, and healthcare providers.
+                You provide evidence-based information to help veterans, their families, and healthcare providers.
 
-Answer the user's question using ONLY the context provided below. 
-If the answer is not in the context, say "I don't have enough information in my knowledge base to answer that question accurately."
-Always cite your sources using [Source: ...] notation.
+                Answer the user's question using ONLY the context provided below. 
+                If the answer is not in the context, say "I don't have enough information in my knowledge base to answer that question accurately."
+                Always cite your sources using [Source: ...] notation.
 
-Be empathetic and supportive in your responses, recognizing the sensitive nature of mental health topics.
+                Be empathetic and supportive in your responses, recognizing the sensitive nature of mental health topics.
 
-Question: {query}
+                Question: {query}
 
-Context:
-{context}
+                Context:
+                {context}
 
-Answer:"""
+                Answer:"""
 
         return prompt, citations
 
@@ -953,265 +959,50 @@ Answer:"""
 
         summary += f"---\n**Sources:** {source_info}"
         return summary
+        """
+        ================================================================================
+        BRFSS DATA ARCHITECTURE - WHY YEARS ARE SEPARATE
+        ================================================================================
 
-    # Woked well before, kept for reference
-    # def _format_standard_answer(
-    #     self, query: str, retrieved_chunks: pd.DataFrame, max_sentences: int = 3
-    # ) -> str:
-    #     """Standard extractive answer formatting with improved readability and
-    #     de-duplication of repeated content.
-    #     """
+        This RAG system maintains SEPARATE indices for each year (2023, 2024) rather 
+        than combining them. This architectural decision is based on:
 
-    #     if retrieved_chunks is None or len(retrieved_chunks) == 0:
-    #         return "I don't have enough information in my knowledge base to answer that question accurately."
+        1. SURVEY METHODOLOGY
+        - BRFSS is a CROSS-SECTIONAL survey (not longitudinal)
+        - Each year surveys DIFFERENT people via random-digit dialing
+        - No individual tracking between years (by design for privacy)
+        - No identifiable information stored
 
-    #     # --- NEW: de-duplicate chunk texts before combining ---
-    #     unique_texts = []
-    #     seen_chunk_fingerprints = set()
-    #     for text in retrieved_chunks["text"].tolist():
-    #         if not isinstance(text, str):
-    #             continue
-    #         fp = text[:160].lower().strip()
-    #         if fp in seen_chunk_fingerprints:
-    #             continue
-    #         seen_chunk_fingerprints.add(fp)
-    #         unique_texts.append(text)
+        2. STATISTICAL CORRECTNESS
+        - Each year = independent random sample
+        - Cannot link individuals across years
+        - Inappropriate to merge independent samples
+        - Respects the cross-sectional design
 
-    #     combined_text = " ".join(unique_texts)
+        3. PRACTICAL BENEFITS
+        - Enables year-specific queries ("What was X in 2024?")
+        - Supports trend analysis ("How did X change 2023-2024?")
+        - Clear data provenance (users know which year)
+        - Easy to add future years
 
-    #     # Check if text contains numbered lists like (1), (2), (3)
-    #     has_numbered_parens = bool(re.search(r"\((\d+)\)", combined_text))
+        METADATA STRUCTURE:
+        {
+            "year": 2024,
+            "state": "California",
+            "topic": "mental_health", 
+            "gender": "male",
+            "source": "BRFSS_2024"
+        }
 
-    #     if has_numbered_parens:
-    #         # Extract and format numbered list items
-    #         items = re.split(r"\((\d+)\)", combined_text)
-    #         formatted_items = []
+        RETRIEVAL APPROACH:
+        - Filter by year for specific queries
+        - Aggregate across years for trend queries
+        - Always maintain year transparency in answers
 
-    #         for i in range(1, len(items), 2):
-    #             if i + 1 < len(items):
-    #                 num = items[i]
-    #                 text = items[i + 1].strip()
-    #                 # Clean up the text
-    #                 text = text.split(";")[
-    #                     0
-    #                 ].strip()  # Take first part before semicolon
-    #                 if text:
-    #                     formatted_items.append(f"{num}. {text}")
-
-    #         # --- NEW: de-duplicate numbered items ---
-    #         dedup_items = []
-    #         seen_item_texts = set()
-    #         for item in formatted_items:
-    #             key = item.lower()
-    #             if key in seen_item_texts:
-    #                 continue
-    #             seen_item_texts.add(key)
-    #             dedup_items.append(item)
-
-    #         if dedup_items:
-    #             answer = "**Key Points:**\n\n" + "\n\n".join(
-    #                 dedup_items[:max_sentences]
-    #             )
-
-    #             # Add source attribution with scores
-    #             sources = retrieved_chunks["source"].unique()[:3]
-    #             top_scores = retrieved_chunks.head(3)["score"].tolist()
-
-    #             source_list = []
-    #             for src, score in zip(sources, top_scores):
-    #                 source_list.append(f"{src} ({score:.3f})")
-
-    #             answer += f"\n\n---\n**Sources:** {', '.join(source_list)}"
-    #             return answer
-
-    #     # Split into sentences
-    #     sentences = [s.strip() for s in combined_text.split(".") if len(s.strip()) > 20]
-
-    #     # --- NEW: de-duplicate sentences while preserving order ---
-    #     unique_sentences = []
-    #     seen_sentence_texts = set()
-    #     for s in sentences:
-    #         key = s.lower()
-    #         if key in seen_sentence_texts:
-    #             continue
-    #         seen_sentence_texts.add(key)
-    #         unique_sentences.append(s)
-    #     sentences = unique_sentences
-
-    #     if not sentences:
-    #         return "I don't have enough information in my knowledge base to answer that question accurately."
-
-    #     # Score sentences by keyword overlap with query
-    #     query_terms = set(query.lower().split())
-
-    #     def score_sentence(sent):
-    #         sent_terms = set(sent.lower().split())
-    #         overlap = len(query_terms & sent_terms)
-    #         # Boost for mental health keywords
-    #         domain_boost = sum(
-    #             1 for kw in self.mental_health_keywords if kw in sent.lower()
-    #         )
-    #         return overlap + (domain_boost * 0.5)
-
-    #     # Get top sentences
-    #     scored_sentences = [(score_sentence(s), s) for s in sentences]
-    #     scored_sentences.sort(reverse=True, key=lambda x: x[0])
-
-    #     # Take up to max_sentences from the de-duplicated set
-    #     top_sentences = [s for _, s in scored_sentences[:max_sentences]]
-
-    #     # Format with better structure
-    #     if len(top_sentences) == 1:
-    #         # Single sentence - just display it
-    #         answer = top_sentences[0]
-    #         if not answer.endswith("."):
-    #             answer += "."
-    #     else:
-    #         # Multiple sentences - format as numbered list or paragraphs
-    #         # Check if content looks like criteria/list items
-    #         if any(
-    #             keyword in combined_text.lower()
-    #             for keyword in [
-    #                 "exclusion criteria",
-    #                 "inclusion criteria",
-    #                 "following:",
-    #                 "criteria were",
-    #             ]
-    #         ):
-    #             # Format as bullet points for criteria/lists
-    #             answer = "**Key Information:**\n\n"
-    #             for i, sent in enumerate(top_sentences, 1):
-    #                 if not sent.endswith("."):
-    #                     sent += "."
-    #                 answer += f"• {sent}\n\n"
-    #         else:
-    #             # Format as paragraphs with spacing
-    #             formatted_sentences = []
-    #             for sent in top_sentences:
-    #                 if not sent.endswith("."):
-    #                     sent += "."
-    #                 formatted_sentences.append(sent)
-    #             answer = "\n\n".join(formatted_sentences)
-
-    #     # Add source attribution with scores
-    #     sources = retrieved_chunks["source"].unique()[:3]
-    #     top_scores = retrieved_chunks.head(3)["score"].tolist()
-
-    #     source_list = []
-    #     for src, score in zip(sources, top_scores):
-    #         source_list.append(f"{src} ({score:.3f})")
-
-    #     answer += f"\n\n---\n**Sources:** {', '.join(source_list)}"
-
-    #     return answer
-
-    # def _format_standard_answer(
-    #     self, query: str, retrieved_chunks: pd.DataFrame, max_sentences: int = 3
-    # ) -> str:
-    #     """Standard extractive answer formatting with improved readability"""
-    #     # Combine all retrieved text
-    #     combined_text = " ".join(retrieved_chunks["text"].tolist())
-
-    #     # Check if text contains numbered lists like (1), (2), (3)
-    #     has_numbered_parens = bool(re.search(r"\((\d+)\)", combined_text))
-
-    #     if has_numbered_parens:
-    #         # Extract and format numbered list items
-    #         items = re.split(r"\((\d+)\)", combined_text)
-    #         formatted_items = []
-
-    #         for i in range(1, len(items), 2):
-    #             if i + 1 < len(items):
-    #                 num = items[i]
-    #                 text = items[i + 1].strip()
-    #                 # Clean up the text
-    #                 text = text.split(";")[
-    #                     0
-    #                 ].strip()  # Take first part before semicolon
-    #                 if text:
-    #                     formatted_items.append(f"{num}. {text}")
-
-    #         if formatted_items:
-    #             answer = "**Key Points:**\n\n" + "\n\n".join(
-    #                 formatted_items[:max_sentences]
-    #             )
-
-    #             # Add source attribution with scores
-    #             sources = retrieved_chunks["source"].unique()[:3]
-    #             top_scores = retrieved_chunks.head(3)["score"].tolist()
-
-    #             source_list = []
-    #             for src, score in zip(sources, top_scores):
-    #                 source_list.append(f"{src} ({score:.3f})")
-
-    #             answer += f"\n\n---\n**Sources:** {', '.join(source_list)}"
-    #             return answer
-
-    #     # Split into sentences
-    #     sentences = [s.strip() for s in combined_text.split(".") if len(s.strip()) > 20]
-
-    #     # Score sentences by keyword overlap with query
-    #     query_terms = set(query.lower().split())
-
-    #     def score_sentence(sent):
-    #         sent_terms = set(sent.lower().split())
-    #         overlap = len(query_terms & sent_terms)
-    #         # Boost for mental health keywords
-    #         domain_boost = sum(
-    #             1 for kw in self.mental_health_keywords if kw in sent.lower()
-    #         )
-    #         return overlap + (domain_boost * 0.5)
-
-    #     # Get top sentences
-    #     scored_sentences = [(score_sentence(s), s) for s in sentences]
-    #     scored_sentences.sort(reverse=True, key=lambda x: x[0])
-
-    #     top_sentences = [s for _, s in scored_sentences[:max_sentences]]
-
-    #     # Format with better structure
-    #     if len(top_sentences) == 1:
-    #         # Single sentence - just display it
-    #         answer = top_sentences[0]
-    #         if not answer.endswith("."):
-    #             answer += "."
-    #     else:
-    #         # Multiple sentences - format as numbered list or paragraphs
-    #         # Check if content looks like criteria/list items
-    #         if any(
-    #             keyword in combined_text.lower()
-    #             for keyword in [
-    #                 "exclusion criteria",
-    #                 "inclusion criteria",
-    #                 "following:",
-    #                 "criteria were",
-    #             ]
-    #         ):
-    #             # Format as bullet points for criteria/lists
-    #             answer = "**Key Information:**\n\n"
-    #             for i, sent in enumerate(top_sentences, 1):
-    #                 if not sent.endswith("."):
-    #                     sent += "."
-    #                 answer += f"• {sent}\n\n"
-    #         else:
-    #             # Format as paragraphs with spacing
-    #             formatted_sentences = []
-    #             for sent in top_sentences:
-    #                 if not sent.endswith("."):
-    #                     sent += "."
-    #                 formatted_sentences.append(sent)
-    #             answer = "\n\n".join(formatted_sentences)
-
-    #     # Add source attribution with scores
-    #     sources = retrieved_chunks["source"].unique()[:3]
-    #     top_scores = retrieved_chunks.head(3)["score"].tolist()
-
-    #     source_list = []
-    #     for src, score in zip(sources, top_scores):
-    #         source_list.append(f"{src} ({score:.3f})")
-
-    #     answer += f"\n\n---\n**Sources:** {', '.join(source_list)}"
-
-    #     return answer
+        REFERENCE: CDC BRFSS is "a cross-sectional telephone survey"
+        https://www.cdc.gov/brfss/
+        ================================================================================
+        """
 
 
 def main():

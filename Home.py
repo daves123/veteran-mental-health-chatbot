@@ -3,6 +3,39 @@ Streamlit Chatbot Interface for Veteran Mental Health RAG System
 Interactive web application for querying veteran mental health information
 
 PRESENTATION MODE: Optimized for live demonstrations
+
+================================================================================
+DATA ARCHITECTURE - BRFSS 2024
+================================================================================
+
+DATA SOURCE:
+------------
+This system uses BRFSS 2024 data only. Future versions could incorporate
+additional years, which would be indexed separately to maintain statistical
+integrity and enable proper trend analysis.
+
+WHY BRFSS 2024 IS A CROSS-SECTIONAL SURVEY:
+--------------------------------------------
+- DIFFERENT PEOPLE: Random-digit dialing selects NEW participants annually
+- NO INDIVIDUAL TRACKING: Does not follow same people over time
+- COMPLETE ANONYMITY: No identifiers, no phone numbers stored
+- BY DESIGN: Privacy protection - cannot link individuals across years
+- SINGLE SNAPSHOT: Represents veteran health status in 2024
+
+FUTURE SCALABILITY:
+-------------------
+If 2023 or 2025 data are added later, each year would be indexed separately to:
+1. Enable year-specific queries ("What was X in 2024?")
+2. Support trend analysis ("How did X change from 2023 to 2024?")
+3. Maintain data provenance and transparency
+4. Respect the independent sample design
+5. Allow proper statistical comparisons
+
+REFERENCES:
+-----------
+- CDC: "BRFSS is a cross-sectional telephone survey"
+- Source: https://www.cdc.gov/brfss/annual_data/annual_2024.html
+================================================================================
 """
 
 import sys
@@ -262,12 +295,12 @@ def reset_chat_state():
 
 
 def main():
-    # Global "Clear Chat History" handling (MUST run before any widgets)
-    if st.session_state.get("clear_history_triggered", False):
-        reset_chat_state()
-        st.session_state.clear_history_triggered = False
-        st.rerun()
-    # End Clear Chat History handling
+    # Load RAG system
+    try:
+        rag = load_rag_system()
+    except Exception as e:
+        st.error(f"Error loading RAG system: {e}")
+        st.stop()
 
     # Header
     st.markdown(
@@ -281,19 +314,24 @@ def main():
     )
 
     st.markdown(
-        '<p class="sub-header">AI-powered support for veterans, families, and healthcare providers</p>',
+        '<p class="sub-header">AI-powered support for veterans, families, and healthcare professionals</p>',
         unsafe_allow_html=True,
     )
+    with st.expander("What is this app?", expanded=True):
+        st.markdown("""
+        **Veteran Mental Health RAG Assistant** is an evidence-based chatbot built on:
 
-    st.markdown(
-        """
-        <div style='text-align: center; padding: 1rem; background: linear-gradient(135deg, #1f4e78 0%, #2d6a9f 100%); border-radius: 10px; margin-bottom: 1rem;'>
-            <h2 style='color: white; margin: 0;'>🎖️ Veteran Mental Health Assistant</h2>
-            <p style='color: #e0e0e0; margin: 0.5rem 0 0 0; font-size: 0.9rem;'>Evidence-Based Support for Veterans & Families</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        - ✅ **BRFSS 2024 veteran health data**
+        - ✅ **Clinical PTSD knowledge (DSM-5, VA/DOD guidelines)**
+        - ✅ **Retrieval-Augmented Generation (RAG)** with source transparency
+
+        Instead of guessing, the system:
+        1. Searches a curated knowledge corpus
+        2. Retrieves the most relevant evidence
+        3. Generates responses grounded in real data
+
+        Every answer is backed by **verifiable sources**, shown below each response.
+        """)
 
     # Sidebar
     with st.sidebar:
@@ -320,6 +358,10 @@ def main():
         This chatbot uses **Retrieval-Augmented Generation (RAG)** to provide 
         evidence-based information about veteran mental health, with a focus on 
         PTSD and related conditions.
+        
+        **Data Note:** Uses BRFSS 2024 data - a cross-sectional survey representing 
+        a snapshot of veteran health. BRFSS surveys different people each year and 
+        cannot track individuals over time.
         """)
 
         # Data Sources with links and descriptions
@@ -327,7 +369,11 @@ def main():
         with st.expander("View All Sources & Links", expanded=False):
             st.markdown("""
             **[BRFSS 2024 Survey Data](https://www.cdc.gov/brfss/annual_data/annual_2024.html)**  
-            *CDC Behavioral Risk Factor Surveillance System*
+            *CDC Behavioral Risk Factor Surveillance System - 2024 cross-sectional sample*
+            
+            **Note:** BRFSS is a cross-sectional survey with different people surveyed 
+            each year. Each year represents an independent random sample. This system 
+            currently uses 2024 data only.
             
             **[Female Veteran Health Data](https://www.cdc.gov/brfss/annual_data/annual_2024.html)**  
             *Processed from BRFSS 2024 - female veteran respondents*
@@ -363,7 +409,7 @@ def main():
         use_llm = st.checkbox(
             "Use LLM Generation",
             value=False,
-            help="(Not enabled in the current course demo deployment)",
+            help="Not enabled in the current academic term.",
         )
 
         if use_llm:
@@ -386,6 +432,7 @@ def main():
         else:
             use_keras = False
 
+        # Inside the sidebar (around line 400-450)
         st.markdown("### Example Questions")
 
         # Enhanced example questions for presentation
@@ -423,11 +470,37 @@ def main():
             key="example_select",
         )
 
-        ask_example = st.button(
+        # When button is clicked, store the example in session state
+        # In sidebar
+        if st.button(
             "➡️ Ask this example",
             help="Run the selected example question",
             key="ask_example_btn",
-        )
+        ):
+            if selected_example:
+                st.session_state.messages.append(
+                    {"role": "user", "content": selected_example}
+                )
+                # Query RAG
+                try:
+                    result = rag.answer_query(
+                        query=selected_example,
+                        k=num_sources,
+                        use_llm=use_llm,
+                        llm_model=llm_model if use_llm else None,
+                    )
+                    st.session_state.messages.append(
+                        {
+                            "role": "assistant",
+                            "content": result["answer"],
+                            "sources": result["sources"],
+                        }
+                    )
+                    st.session_state.query_count += 1
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+                st.rerun()
 
         st.markdown("---")
 
@@ -454,13 +527,6 @@ def main():
             unsafe_allow_html=True,
         )
 
-    # Load RAG system
-    try:
-        rag = load_rag_system()
-    except Exception as e:
-        st.error(f"Error loading RAG system: {e}")
-        st.stop()
-
     # Initialize session state
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -474,6 +540,13 @@ def main():
 
     if "demo_in_progress" not in st.session_state:
         st.session_state.demo_in_progress = False
+
+    # Has anything happened yet? (used to hide controls on first load)
+    has_activity = bool(
+        st.session_state.messages  # any chat messages
+        or st.session_state.demo_results  # any demo runs
+        or st.session_state.get("query_count", 0) > 0  # any queries answered
+    )
 
     # Show statistics if requested
     if st.session_state.get("show_stats", False):
@@ -694,7 +767,66 @@ def main():
 
         st.markdown("---")
 
-    # Display chat messages from history
+    # --- FOOTER: actions, examples, input, processing, display -----------
+    st.markdown("---")
+
+    st.markdown("### Try one of these example questions")
+
+    example_queries = [
+        "What are the symptoms of PTSD?",
+        "What treatments are available for PTSD?",
+        "How does PTSD affect female veterans?",
+        "What resources exist for military sexual trauma?",
+    ]
+
+    # --- Example question buttons ----------------------------------------
+    pending_query = None
+    cols = st.columns(len(example_queries))
+    for col, q in zip(cols, example_queries):
+        with col:
+            if st.button(q):
+                pending_query = q
+
+    # --- Always render the chat input ------------------------------------
+    typed_query = st.chat_input("Ask a question about veteran mental health...")
+
+    # --- Decide what to use as the actual user_input ---------------------
+    user_input = None
+
+    # 1) Priority: bottom example buttons
+    if pending_query:
+        user_input = pending_query
+
+    # 2) Finally: whatever the user typed
+    elif typed_query:
+        user_input = typed_query
+
+    # --- Process new input -----------------------------------------------
+    if user_input and not st.session_state.get("clear_history_triggered", False):
+        # Add user message
+        st.session_state.messages.append({"role": "user", "content": user_input})
+
+        # Query RAG and add assistant message
+        with st.spinner("🔍 Searching knowledge base and generating response..."):
+            try:
+                result = rag.answer_query(
+                    query=user_input,
+                    k=num_sources,
+                    use_llm=use_llm,
+                    llm_model=llm_model if use_llm else None,
+                )
+                st.session_state.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": result["answer"],
+                        "sources": result["sources"],
+                    }
+                )
+                st.session_state.query_count += 1
+            except Exception as e:
+                st.error(f"Error generating response: {e}")
+
+    # --- Render conversation AFTER processing ----------------------------
     for message in st.session_state.messages:
         display_chat_message(
             message["role"],
@@ -704,85 +836,37 @@ def main():
             highlight_gender=show_gender_analysis,
         )
 
-    # Footer actions
-    st.markdown("---")
-    col1, col2, col3 = st.columns(3)
+    # --- Footer actions (AFTER conversation rendering) ------------------
+    has_activity = bool(st.session_state.messages or st.session_state.demo_results)
 
-    with col1:
-        if st.button("🗑️ Clear Chat History", key="clear_history_btn"):
-            # Set a flag; the actual reset+rerun is handled near the top of main()
-            st.session_state.clear_history_triggered = True
+    if has_activity:
+        st.markdown("---")
+        col1, col2, col3 = st.columns(3)
 
-    with col2:
-        if st.button("💾 Export Conversation"):
-            # Create export data
-            export_data = {
-                "timestamp": datetime.now().isoformat(),
-                "messages": st.session_state.messages,
-                "query_count": st.session_state.query_count,
-            }
-
-            st.download_button(
-                label="Download JSON",
-                data=str(export_data),
-                file_name=f"chat_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                mime="application/json",
-            )
-
-    with col3:
-        st.markdown("")  # Placeholder
-
-    # Chat input
-    user_input = st.chat_input("Ask a question about veteran mental health...")
-
-    # Handle example question ONLY when the button is clicked
-    if not user_input and ask_example and selected_example and selected_example != "":
-        user_input = selected_example
-
-    # Process user input ONLY if we are NOT in the middle of clearing history
-    if user_input and not st.session_state.get("clear_history_triggered", False):
-        # Add user message to history
-        st.session_state.messages.append({"role": "user", "content": user_input})
-
-        # Display user message
-        display_chat_message("user", user_input)
-
-        # Generate response
-        with st.spinner("🔍 Searching knowledge base and generating response..."):
-            try:
-                result = rag.answer_query(
-                    query=user_input,
-                    k=num_sources,
-                    use_llm=use_llm,
-                    llm_model=llm_model if use_llm else None,
+        with col1:
+            if st.button("🗑️ Clear Chat History", key="clear_history_btn"):
+                reset_chat_state()
+                st.rerun()
+        with col2:
+            if st.button("💾 Export Conversation"):
+                export_data = {
+                    "timestamp": datetime.now().isoformat(),
+                    "messages": st.session_state.messages,
+                    "query_count": st.session_state.query_count,
+                }
+                st.download_button(
+                    label="Download JSON",
+                    data=str(export_data),
+                    file_name=f"chat_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json",
+                    key="download_btn",
                 )
 
-                # Add assistant message to history
-                st.session_state.messages.append(
-                    {
-                        "role": "assistant",
-                        "content": result["answer"],
-                        "sources": result["sources"],
-                    }
-                )
+        with col3:
+            st.markdown("")
 
-                # Display assistant message
-                display_chat_message(
-                    "assistant",
-                    result["answer"],
-                    result["sources"],
-                    show_scores=show_scores,
-                    highlight_gender=show_gender_analysis,
-                )
-
-                # Update query count
-                st.session_state.query_count += 1
-
-            except Exception as e:
-                st.error(f"Error generating response: {e}")
-
-    # Persistent disclaimer below the input
-    if st.session_state.get("query_count", 0) > 0 or user_input:
+    # Disclaimer
+    if has_activity:
         st.markdown(
             """
             <div class="disclaimer">
