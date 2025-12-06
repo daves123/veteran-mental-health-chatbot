@@ -25,6 +25,10 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+st.markdown("""
+    Responses are generated using Retrieval-Augmented Generation (RAG),
+    which combines semantic search over a clinical evidence corpus with natural language generation.
+""")
 
 
 # Load RAG system
@@ -66,15 +70,6 @@ COLORS = {
 
 # Main metrics
 st.header("📊 Overview Metrics")
-st.caption(
-    "This system uses semantic search to retrieve evidence from a 33k+ chunk corpus "
-    "before generating responses — improving accuracy and transparency."
-)
-st.caption(
-    "Responses are generated using Retrieval-Augmented Generation (RAG), "
-    "which combines semantic search over a clinical evidence corpus with natural language generation."
-)
-
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -194,8 +189,8 @@ with col2:
         pct = (count / total_chunks * 100) if total_chunks > 0 else 0
 
         label_map = {
-            "male": "👨 Male Veteran Data",
-            "female": "👩 Female Veteran Data",
+            "male": "👨‍✈️ Male Veteran Data",
+            "female": "👩‍✈️ Female Veteran Data",
             "neutral": "🔷 Gender-Neutral Data",
         }
 
@@ -410,7 +405,7 @@ st.markdown("---")
 st.header("🔍 Sample Knowledge Chunks by Gender")
 
 tab1, tab2, tab3 = st.tabs(
-    ["👨 Male Veteran Data", "👩 Female Veteran Data", "🔷 Gender-Neutral Data"]
+    ["👨‍✈️ Male Veteran Data", "👩‍✈️ Female Veteran Data", "🔷 Gender-Neutral Data"]
 )
 
 with tab1:
