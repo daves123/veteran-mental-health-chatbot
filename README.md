@@ -59,7 +59,7 @@ cd veteran_mental_health_chatbot
 pip install -r requirements-minimal.txt
 
 # Run the chatbot
-streamlit run app.py
+streamlit run Home.py
 ```
 
 The application will open in your browser at `http://localhost:8501`
