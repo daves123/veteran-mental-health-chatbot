@@ -83,8 +83,6 @@ All data comes from publicly available, authoritative sources:
 | Source | Description | Link |
 |--------|-------------|------|
 | **BRFSS 2024** | CDC Behavioral Risk Factor Surveillance System | [View](https://www.cdc.gov/brfss/annual_data/annual_2024.html) |
-| **Female Veteran Data** | Pre-cleaned BRFSS 2024 subset (female veterans) | [View](https://www.cdc.gov/brfss/annual_data/annual_2024.html) |
-| **Male Veteran Data** | Pre-cleaned BRFSS 2024 subset (male veterans) | [View](https://www.cdc.gov/brfss/annual_data/annual_2024.html) |
 | **VA PTSD Repository** | Sample characteristics from VA research | [View](https://ptsd-va.data.socrata.com/PTSD-Repository/Study-Characteristics/npcj-egem/about_data) |
 | **Medical Abbreviations** | VA PTSD terminology database | [View](https://ptsd-va.data.socrata.com/PTSD-Repository/Abbreviations/46j5-9dq5/about_data) |
 | **AHRQ Treatment Research** | Systematic review of PTSD treatments | [View](https://catalog.data.gov/dataset/ahrq-report-and-data-files-2023-pharmacological-and-nonpharmacological-treatments-for-post) |
