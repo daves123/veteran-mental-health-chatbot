@@ -69,7 +69,7 @@ COLORS = {
 }
 
 # Main metrics
-st.header("📊 Overview Metrics")
+st.header("Overview Metrics")
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -278,7 +278,7 @@ with col2:
 st.markdown("---")
 
 # Gender by Source Cross-Analysis
-st.header("🔍 Gender Distribution Across Top Sources")
+st.header("Gender Distribution Across Top Sources")
 
 top_sources_list = source_counts.head(10).index.tolist()
 gender_source_data = []
@@ -333,7 +333,7 @@ if not gender_source_df.empty:
 st.markdown("---")
 
 # All sources table
-st.header("📋 Complete Source Inventory")
+st.header("Complete Source Inventory")
 
 with st.expander("View All Data Sources", expanded=False):
     all_sources = source_counts.reset_index()
@@ -347,7 +347,7 @@ with st.expander("View All Data Sources", expanded=False):
     # Download button
     csv = all_sources.to_csv(index=False)
     st.download_button(
-        label="📥 Download Source Inventory (CSV)",
+        label="Download Source Inventory (CSV)",
         data=csv,
         file_name="rag_source_inventory.csv",
         mime="text/csv",
@@ -356,7 +356,7 @@ with st.expander("View All Data Sources", expanded=False):
 st.markdown("---")
 
 # Chunk length analysis
-st.header("📏 Chunk Length Analysis")
+st.header("Chunk Length Analysis")
 
 col1, col2 = st.columns(2)
 
@@ -402,7 +402,7 @@ with col2:
 st.markdown("---")
 
 # Sample chunks by gender
-st.header("🔍 Sample Knowledge Chunks by Gender")
+st.header("Sample Knowledge Chunks by Gender")
 
 tab1, tab2, tab3 = st.tabs(
     ["👨‍✈️ Male Veteran Data", "👩‍✈️ Female Veteran Data", "🔷 Gender-Neutral Data"]

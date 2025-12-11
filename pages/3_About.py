@@ -14,7 +14,7 @@ st.markdown(
 )
 
 # Project Overview
-st.header("📋 Project Overview")
+st.header("Project Overview")
 
 col1, col2 = st.columns([2, 1])
 
@@ -182,7 +182,7 @@ with tab4:
 
 st.markdown("---")
 ## Corpus Construction
-st.header("🧠 Corpus Construction")
+st.header("Corpus Construction")
 st.markdown("""
     - The final corpus contains **tens of thousands of knowledge chunks**
     - Each chunk includes:
@@ -206,7 +206,7 @@ st.markdown("""
 st.markdown("---")
 
 # Methodology
-st.header("🔬 Methodology")
+st.header("Methodology")
 
 st.subheader("Data Processing Pipeline")
 
@@ -259,9 +259,6 @@ with col1:
     - Data processing pipeline
     - Vector embedding implementation
     - Frontend development
-    
-    📧 Contact: [Add email if desired]  
-    🔗 LinkedIn: [Add link if desired]
     """)
 
 with col2:
@@ -273,15 +270,12 @@ with col2:
     - Answer formatting logic
     - Testing & validation
     - Documentation
-    
-    📧 Contact: [Add email if desired]  
-    🔗 LinkedIn: [Add link if desired]
     """)
 
 st.markdown("---")
 
 # Acknowledgments
-st.header("🙏 Acknowledgments")
+st.header("Acknowledgments")
 
 col1, col2 = st.columns(2)
 
@@ -411,7 +405,7 @@ with col2:
 st.markdown("---")
 
 # Future Enhancements
-st.header("🚀 Future Enhancements")
+st.header("Future Enhancements")
 
 col1, col2, col3 = st.columns(3)
 
@@ -448,7 +442,7 @@ with col3:
 st.markdown("---")
 
 # Contact & Feedback
-st.header("📬 Contact & Feedback")
+st.header("Contact & Feedback")
 
 col1, col2 = st.columns([2, 1])
 
