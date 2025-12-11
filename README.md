@@ -9,7 +9,7 @@ An evidence-based mental health information system for veterans, families, and h
 
 ## Project Overview
 
-This chatbot addresses a critical need in veteran mental healthcare by providing 24/7 access to evidence-based information about PTSD and related conditions. Built with a focus on female veterans, an underserved population in mental health research—the system draws from authoritative government and clinical sources to deliver accurate, cited responses.
+This chatbot addresses a critical need in veteran mental healthcare by providing 24/7 access to evidence-based information about PTSD and related conditions. Built with a focus on female veterans, an underserved population in mental health research, the system draws from authoritative government and clinical sources to deliver accurate, cited responses.
 
 **Personal Motivation:** This project stems from direct experience as a veteran, and I've seen firsthand the challenges veterans face in accessing mental health information and care.
 
