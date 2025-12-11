@@ -375,12 +375,6 @@ def main():
             each year. Each year represents an independent random sample. This system 
             currently uses 2024 data only.
             
-            **[Female Veteran Health Data](https://www.cdc.gov/brfss/annual_data/annual_2024.html)**  
-            *Processed from BRFSS 2024 - female veteran respondents*
-            
-            **[Male Veteran Health Data](https://www.cdc.gov/brfss/annual_data/annual_2024.html)**  
-            *Processed from BRFSS 2024 - male veteran respondents*
-            
             **[PTSD VA Sample Characteristics](https://ptsd-va.data.socrata.com/PTSD-Repository/Study-Characteristics/npcj-egem/about_data)**  
             *VA PTSD Research Repository*
             
