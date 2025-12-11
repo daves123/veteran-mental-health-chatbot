@@ -457,9 +457,9 @@ with col1:
     We welcome feedback, suggestions, and collaboration opportunities!
     
     **Ways to Reach Us:**
-    - 📧 Email: dsingh41@oldwestbury.edu
-    - 💼 LinkedIn: https://www.linkedin.com/in/dave-singh-ny/
-    - 🐙 GitHub: [TBD]
+    - Email: dsingh41@oldwestbury.edu
+    - LinkedIn: https://www.linkedin.com/in/dave-singh-ny/
+    - GitHub: https://github.com/daves123/veteran-mental-health-chatbot
      
     **For Technical Issues:**
     Please report bugs or technical issues with:
