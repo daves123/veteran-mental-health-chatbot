@@ -457,11 +457,10 @@ with col1:
     We welcome feedback, suggestions, and collaboration opportunities!
     
     **Ways to Reach Us:**
-    - 📧 Email: [Add your email]
-    - 💼 LinkedIn: [Add LinkedIn profiles]
-    - 🐙 GitHub: [Add repository link if public]
-    - 🎓 Institution: [Add university name]
-    
+    - 📧 Email: dsingh41@oldwestbury.edu
+    - 💼 LinkedIn: https://www.linkedin.com/in/dave-singh-ny/
+    - 🐙 GitHub: [TBD]
+     
     **For Technical Issues:**
     Please report bugs or technical issues with:
     - Detailed description of the problem
