@@ -126,7 +126,11 @@ Where can veterans find mental health services?
 
 ```
 veteran_mental_health_chatbot/
-├── app.py                          # Streamlit application
+├── home.py                          # Streamlit application
+├── pages/
+│   ├── 1_Data_Architecture.py
+│   ├── 2_Statistics.py
+│   ├── 3_About.py 
 ├── src/
 │   ├── rag_system.py              # RAG implementation
 │   └── data_processor.py          # Data processing
