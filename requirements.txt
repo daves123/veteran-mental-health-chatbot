@@ -1,3 +1,5 @@
+streamlit
+
 # Core ML and Data Science
 pandas==2.2.3
 numpy==2.2.0
