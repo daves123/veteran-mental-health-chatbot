@@ -71,6 +71,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+st.sidebar.markdown("### RELATED APPS")
+st.sidebar.markdown(
+    "[Veterans Mental Health Dashboard](https://veteran-mental-health-dashboard.streamlit.app/)"
+)
+
 # Custom CSS
 st.markdown(
     """
