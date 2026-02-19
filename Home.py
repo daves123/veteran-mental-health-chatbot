@@ -70,10 +70,25 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
 st.sidebar.markdown("### RELATED APPS")
 st.sidebar.markdown(
-    "[Veterans Mental Health Dashboard](https://veteran-mental-health-dashboard.streamlit.app/)"
+    """
+<a href="https://veteran-mental-health-dashboard.streamlit.app/" target="_blank">
+    <button style="
+        background-color: #1f77b4;
+        color: white;
+        border: none;
+        padding: 10px 16px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: bold;
+        cursor: pointer;
+        width: 100%;
+        text-align: left;
+    ">Click here to view the VETERAN MENTAL HEALTH DASHBOARD</button>
+</a>
+""",
+    unsafe_allow_html=True,
 )
 
 # Custom CSS
