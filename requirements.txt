@@ -1,18 +1,18 @@
 # Core ML and Data Science
 pandas==2.2.3
-numpy==1.26.4
-scikit-learn==1.4.2
+numpy==2.2.0
+scikit-learn==1.6.1
 
 # NLP and Embeddings
 sentence-transformers==3.0.1
 transformers==4.44.0
-torch==2.6.0+cpu --extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.6.0
 
 # Vector Databases
 faiss-cpu==1.8.0
 chromadb==0.5.3
 
-# Deep Learning (Python 3.13 has very limited TF support — consider removing if unused)
+# Deep Learning
 tensorflow-cpu==2.17.0
 keras==3.4.1
 
@@ -22,7 +22,6 @@ langchain-community==0.2.16
 openai==1.40.0
 
 # UI
-streamlit==1.37.0
 plotly==5.23.0
 matplotlib==3.9.1
 seaborn==0.13.2
