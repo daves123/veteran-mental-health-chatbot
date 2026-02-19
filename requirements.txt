@@ -1,3 +1,4 @@
+streamlit
 
 # Core ML and Data Science
 pandas==2.2.3
