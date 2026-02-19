@@ -25,7 +25,7 @@ data/pharma-nonpharma-ptsd-2023-update-app-g-2/
 !data/.gitkeep
 
 # Models (rebuilt automatically)
-models/faiss_index/
+# models/faiss_index/
 models/*.h5
 models/*.pkl
 
